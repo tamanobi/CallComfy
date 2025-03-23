@@ -433,6 +433,7 @@
 <style>
   .dynamic-form {
     width: 100%;
+    padding-bottom: 70px;
   }
   
   .form-group {
@@ -495,6 +496,16 @@
   
   .form-actions {
     margin-top: 1.5rem;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 1rem;
+    background-color: #fff;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    display: flex;
+    justify-content: center;
   }
   
   .generate-btn {
@@ -506,6 +517,8 @@
     cursor: pointer;
     font-weight: 500;
     transition: background-color 0.2s ease;
+    width: 100%;
+    max-width: 300px;
   }
   
   .generate-btn:hover {
@@ -519,6 +532,7 @@
   
   .progress-container {
     margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
   }
   
   .progress-bar {
@@ -545,6 +559,7 @@
   
   .error-message {
     margin-top: 1rem;
+    margin-bottom: 1.5rem;
     padding: 0.8rem;
     background-color: #ffebee;
     border-left: 4px solid #f44336;
