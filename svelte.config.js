@@ -20,7 +20,8 @@ const config = {
 			strict: true
 		}),
         paths: {
-            base: '/CallComfy'
+            // @see https://svelte.dev/docs/kit/adapter-static#GitHub-Pages
+            base: process.argv.includes("dev") ? "" : process.env.BASE_PATH,
         }
 	}
 };
