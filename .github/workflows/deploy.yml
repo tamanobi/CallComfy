@@ -4,6 +4,9 @@ on:
   push:
     branches: [main] # メインブランチへのプッシュ時に実行
 
+permissions:
+  contents: write # リポジトリ内容への書き込み権限を明示的に付与
+
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
@@ -25,4 +28,5 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: build # デプロイするフォルダ
-          branch: gh-pages # デプロイ先のブランチ（通常はgh-pages） 
+          branch: gh-pages # デプロイ先のブランチ（通常はgh-pages）
+          token: ${{ secrets.GITHUB_TOKEN }} # 明示的にトークンを指定 
