@@ -13,6 +13,7 @@
   const dispatch = createEventDispatcher<DynamicFormEvents>();
   let workflowInputs: any = {};
   let formData: any = {};
+  let nodeCollapsedState: { [nodeId: string]: boolean } = {}; // State for each node's collapsed status
   let isGenerating = false;
   let progress = 0;
   let currentNodeName = '';
@@ -31,6 +32,7 @@
     
     // Initialize form data with default values from workflow
     initFormData();
+    initCollapsedState(); // Initialize collapsed state when workflow changes
     
     // Setup WebSocket listener for progress updates if enabled
     if (wsEnabled) {
@@ -48,6 +50,7 @@
   $: if (workflow) {
     workflowInputs = extractWorkflowInputs(workflow);
     initFormData();
+    initCollapsedState(); // Initialize collapsed state when workflow changes
   }
   
   function initFormData() {
@@ -62,6 +65,14 @@
       for (const inputKey in workflowInputs[nodeId].inputs) {
         formData[nodeId].inputs[inputKey] = workflowInputs[nodeId].inputs[inputKey];
       }
+    }
+  }
+  
+  // Initialize the collapsed state for each node (default to not collapsed)
+  function initCollapsedState() {
+    nodeCollapsedState = {};
+    for (const nodeId in workflowInputs) {
+      nodeCollapsedState[nodeId] = false; // Start expanded
     }
   }
   
@@ -352,6 +363,10 @@
       .replace(/([A-Z])/g, ' $1')
       .replace(/^\w/, c => c.toUpperCase());
   }
+  
+  function toggleNodeCollapse(nodeId: string) {
+    nodeCollapsedState[nodeId] = !nodeCollapsedState[nodeId];
+  }
 </script>
 
 <div class="dynamic-form">
@@ -360,40 +375,50 @@
   {:else}
     <form on:submit|preventDefault={handleSubmit}>
       {#each Object.keys(workflowInputs) as nodeId}
-        <div class="form-group">
-          <h4>{getNodeName(nodeId)}</h4>
-          {#each Object.keys(workflowInputs[nodeId].inputs) as inputKey}
-            {@const inputValue = workflowInputs[nodeId].inputs[inputKey]}
-            {@const inputType = getInputType(inputValue)}
-            
-            <div class="form-field">
-              <label for={`${nodeId}-${inputKey}`}>
-                {getInputLabel(inputKey)}
-              </label>
-              
-              {#if inputType === 'number'}
-                <input 
-                  type="number" 
-                  id={`${nodeId}-${inputKey}`}
-                  bind:value={formData[nodeId].inputs[inputKey]}
-                  step="any"
-                />
-              {:else if inputType === 'file'}
-                <input 
-                  type="text" 
-                  id={`${nodeId}-${inputKey}`}
-                  bind:value={formData[nodeId].inputs[inputKey]}
-                  placeholder="File path"
-                />
-              {:else}
-                <textarea 
-                  id={`${nodeId}-${inputKey}`}
-                  bind:value={formData[nodeId].inputs[inputKey]}
-                  rows="8"
-                ></textarea>
-              {/if}
+        <div 
+          class="form-group collapsible-group"
+          class:collapsed={nodeCollapsedState[nodeId]}
+        >
+          <div class="collapsible-header" on:click={() => toggleNodeCollapse(nodeId)} role="button" tabindex="0" aria-expanded={!nodeCollapsedState[nodeId]}>
+            <span class="collapse-icon">{nodeCollapsedState[nodeId] ? '►' : '▼'}</span>
+            <h4>{getNodeName(nodeId)}</h4>
+          </div>
+          {#if !nodeCollapsedState[nodeId]}
+            <div class="collapsible-content">
+              {#each Object.keys(workflowInputs[nodeId].inputs) as inputKey}
+                {@const inputValue = workflowInputs[nodeId].inputs[inputKey]}
+                {@const inputType = getInputType(inputValue)}
+                
+                <div class="form-field">
+                  <label for={`${nodeId}-${inputKey}`}>
+                    {getInputLabel(inputKey)}
+                  </label>
+                  
+                  {#if inputType === 'number'}
+                    <input 
+                      type="number" 
+                      id={`${nodeId}-${inputKey}`}
+                      bind:value={formData[nodeId].inputs[inputKey]}
+                      step="any"
+                    />
+                  {:else if inputType === 'file'}
+                    <input 
+                      type="text" 
+                      id={`${nodeId}-${inputKey}`}
+                      bind:value={formData[nodeId].inputs[inputKey]}
+                      placeholder="File path"
+                    />
+                  {:else}
+                    <textarea 
+                      id={`${nodeId}-${inputKey}`}
+                      bind:value={formData[nodeId].inputs[inputKey]}
+                      rows="16"
+                    ></textarea>
+                  {/if}
+                </div>
+              {/each}
             </div>
-          {/each}
+          {/if}
         </div>
       {/each}
       
@@ -437,19 +462,75 @@
   }
   
   .form-group {
+    /* margin-bottom: 1.5rem; */ /* Removed as collapsible-group handles margin */
+    padding: 0; /* Removed as collapsible-group handles padding */
+    border: none; /* Removed as collapsible-group handles border */
+    border-radius: 0; /* Removed */
+    background-color: transparent; /* Removed */
+  }
+  
+  .collapsible-group {
     margin-bottom: 1.5rem;
-    padding: 1rem;
+    padding: 0.3rem 1rem;
     border: 1px solid #eee;
     border-radius: 8px;
     background-color: #f9f9f9;
+    transition: padding 0.2s ease-out, margin-bottom 0.2s ease-out;
+  }
+
+  /* Styles for collapsed state */
+  .collapsible-group.collapsed {
+    padding-top: 0.1rem;
+    padding-bottom: 0.1rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    margin-bottom: 10px;
+    user-select: none;
+    transition: margin-bottom 0.2s ease-out;
+  }
+
+  .collapsible-group.collapsed .collapsible-header {
+    margin-bottom: 0.2rem;
   }
   
+   .collapsible-header:focus {
+     outline: 2px solid #4caf50; /* Use theme color for focus */
+     outline-offset: 2px;
+   }
+
+  .collapsible-header .collapse-icon {
+    margin-right: 10px;
+    font-size: 1em;
+    width: 1em;
+    text-align: center;
+    color: #555;
+  }
+
+  .collapsible-header h4 {
+    margin: 0;
+    padding: 0;
+    border: none;
+    font-weight: 600;
+    flex-grow: 1;
+    transition: font-size 0.2s ease-out;
+  }
+    
+  .collapsible-content {
+     padding-left: calc(1em + 10px); /* Indent content */
+  }
+
   h4 {
-    margin-top: 0;
+    /* These styles are now applied within .collapsible-group h4 */
+    /* margin-top: 0;
     margin-bottom: 1rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid #eee;
-    color: #333;
+    color: #333; */
   }
   
   .form-field {
