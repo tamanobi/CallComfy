@@ -76,6 +76,7 @@
   }
   
   main {
+    box-sizing: content-box;
     padding: 1rem;
     max-width: 1200px;
     margin: 0 auto;
@@ -110,7 +111,6 @@
   
   .app-container {
     display: flex;
-    flex-wrap: wrap;
     gap: 0.5rem;
   }
   
@@ -161,8 +161,6 @@
       flex-direction: column;
     }
     
-    .workflow-section, .result-section, .history-section {
-      width: 100%;
-    }
+    .workflow-section, .result-section, .history-section {}
   }
 </style>

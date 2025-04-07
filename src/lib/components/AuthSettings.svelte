@@ -275,6 +275,7 @@
   }
   
   input {
+    box-sizing: border-box;
     width: 100%;
     padding: 0.7rem;
     border: 1px solid #ddd;
