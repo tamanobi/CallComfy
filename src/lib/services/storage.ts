@@ -56,6 +56,19 @@ export function saveWorkflow(workflow: Workflow): void {
   }
 }
 
+// Update the content of an existing workflow by ID
+export function updateWorkflowContent(id: string, newContent: any): void {
+  const workflows = getStoredWorkflows();
+  const index = workflows.findIndex(w => w.id === id);
+  if (index !== -1) {
+    workflows[index].content = newContent;
+    localStorage.setItem(WORKFLOWS_KEY, JSON.stringify(workflows));
+    console.log(`Workflow content updated for ID: ${id}`);
+  } else {
+    console.error(`Workflow with ID ${id} not found for update.`);
+  }
+}
+
 // Delete workflow from localStorage
 export function deleteWorkflow(id: string): void {
   if (typeof window === 'undefined') return;

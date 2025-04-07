@@ -1,9 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { extractWorkflowInputs, sendWorkflow, addWebSocketListener, connectWebSocket, disconnectWebSocket } from '$lib/services/comfyApi';
-  import { saveImageToHistory, getAuthSettings } from '$lib/services/storage';
+  import { saveImageToHistory, getAuthSettings, updateWorkflowContent } from '$lib/services/storage';
   
-  export let workflow: any;
+  // Expect the full workflow object including id and name
+  export let workflow: { id: string, name: string, content: any } | null = null;
   
   // Define event types for the dispatcher
   interface DynamicFormEvents {
@@ -18,6 +19,7 @@
   let progress = 0;
   let currentNodeName = '';
   let errorMessage = '';
+  let saveMessage = ''; // Message for save status
   let removeWebSocketListener: (() => void) | null = null;
   let wsEnabled = true;
   let promptId: string | null = null;
@@ -27,12 +29,14 @@
     const authSettings = getAuthSettings();
     wsEnabled = authSettings.wsEnabled;
     
-    // Extract editable inputs from the workflow
-    workflowInputs = extractWorkflowInputs(workflow);
-    
-    // Initialize form data with default values from workflow
-    initFormData();
-    initCollapsedState(); // Initialize collapsed state when workflow changes
+    if (workflow && workflow.content) {
+      // Extract editable inputs from the workflow content
+      workflowInputs = extractWorkflowInputs(workflow.content);
+      
+      // Initialize form data with default values from workflow content
+      initFormData();
+      initCollapsedState(); // Initialize collapsed state when workflow changes
+    }
     
     // Setup WebSocket listener for progress updates if enabled
     if (wsEnabled) {
@@ -47,8 +51,8 @@
   });
   
   // When workflow changes, update inputs and form data
-  $: if (workflow) {
-    workflowInputs = extractWorkflowInputs(workflow);
+  $: if (workflow && workflow.content) {
+    workflowInputs = extractWorkflowInputs(workflow.content);
     initFormData();
     initCollapsedState(); // Initialize collapsed state when workflow changes
   }
@@ -63,6 +67,8 @@
       }
       
       for (const inputKey in workflowInputs[nodeId].inputs) {
+        // Ensure formData structure matches workflowInputs structure
+        if (!formData[nodeId].inputs) formData[nodeId].inputs = {};
         formData[nodeId].inputs[inputKey] = workflowInputs[nodeId].inputs[inputKey];
       }
     }
@@ -183,6 +189,7 @@
   }
   
   async function handleBinaryData(binaryData: Blob | ArrayBuffer) {
+    if (!workflow || !workflow.content) return; // Ensure workflow content exists
     try {
       // Detect the image type (PNG or JPEG) from the binary data
       let blob: Blob;
@@ -303,14 +310,21 @@
   
   async function handleSubmit() {
     errorMessage = '';
+    saveMessage = ''; // Clear save message on new generation attempt
     
+    if (!workflow || !workflow.content) {
+        errorMessage = "Workflow content is missing.";
+        console.error("Workflow content is missing, cannot start generation.");
+        return;
+    }
+
     try {
       isGenerating = true;
       progress = 0;
       currentNodeName = 'Starting...';
       
-      // Send workflow to ComfyUI and get the prompt ID
-      const result = await sendWorkflow(workflow, formData);
+      // Send workflow content to ComfyUI and get the prompt ID
+      const result = await sendWorkflow(workflow.content, formData); // Pass workflow.content
       promptId = result.prompt_id;
       
       console.log('Workflow sent, prompt ID:', promptId);
@@ -331,6 +345,57 @@
     }
   }
   
+  async function handleSave() {
+    errorMessage = '';
+    saveMessage = '';
+
+    if (!workflow || !workflow.id || !workflow.content) { // Check for id and content
+      errorMessage = "Cannot save: Workflow data is incomplete.";
+      console.error("Workflow ID or content is missing, cannot save.");
+      return;
+    }
+
+    // Create a deep copy of the workflow content to modify
+    let updatedWorkflowContent = JSON.parse(JSON.stringify(workflow.content)); // Copy content
+
+    // Iterate through the formData and update the copied workflow content
+    for (const nodeId in formData) {
+      if (updatedWorkflowContent[nodeId] && updatedWorkflowContent[nodeId].inputs) {
+        for (const inputKey in formData[nodeId].inputs) {
+          // Check if the key exists in the original workflow's inputs to ensure we only update editable fields
+          if (updatedWorkflowContent[nodeId].inputs.hasOwnProperty(inputKey)) {
+             // Only update if the type matches the original type (string or number)
+             // This prevents accidentally overwriting arrays/objects not handled by the form
+             const originalValue = workflow.content[nodeId].inputs[inputKey]; // Check against workflow.content
+             if (typeof originalValue === 'string' || typeof originalValue === 'number') {
+                updatedWorkflowContent[nodeId].inputs[inputKey] = formData[nodeId].inputs[inputKey];
+             } else {
+                 console.warn(`Skipping update for non-string/number input key ${inputKey} in node ${nodeId}`);
+             }
+          } else {
+            console.warn(`Input key ${inputKey} not found in original workflow inputs for node ${nodeId}`);
+          }
+        }
+      } else {
+         console.warn(`Node ID ${nodeId} not found in original workflow or has no inputs`);
+      }
+    }
+
+    try {
+      // Call the storage function to update the workflow using its original ID
+      updateWorkflowContent(workflow.id, updatedWorkflowContent); // Use workflow.id and the updated content
+      saveMessage = "Workflow saved successfully!";
+      console.log("Workflow saved successfully!");
+
+      // Optionally clear the message after a delay
+      setTimeout(() => saveMessage = '', 3000);
+
+    } catch (error) {
+      console.error("Error saving workflow:", error);
+      errorMessage = "Failed to save workflow changes.";
+    }
+  }
+  
   function getInputType(value: any): string {
     if (typeof value === 'number') {
       return 'number';
@@ -346,9 +411,9 @@
   }
   
   function getNodeName(nodeId: string): string {
-    if (!workflow) return nodeId;
+    if (!workflow || !workflow.content) return nodeId; // Check for content
     
-    const node = workflow[nodeId];
+    const node = workflow.content[nodeId]; // Access content
     if (node && node.class_type) {
       return `${node.class_type} (${nodeId})`;
     }
@@ -370,7 +435,7 @@
 </script>
 
 <div class="dynamic-form">
-  {#if Object.keys(workflowInputs).length === 0}
+  {#if !workflow || !workflow.content || Object.keys(workflowInputs).length === 0} <!-- Check workflow and content -->
     <p>No editable inputs found in this workflow.</p>
   {:else}
     <form on:submit|preventDefault={handleSubmit}>
@@ -423,6 +488,14 @@
       {/each}
       
       <div class="form-actions">
+        <button
+          type="button"
+          class="save-btn"
+          on:click={handleSave}
+          disabled={isGenerating}
+        >
+          Save Workflow
+        </button>
         <button 
           type="submit" 
           class="generate-btn"
@@ -450,6 +523,11 @@
     {#if errorMessage}
       <div class="error-message">
         {errorMessage}
+      </div>
+    {/if}
+    {#if saveMessage}
+      <div class="save-message">
+        {saveMessage}
       </div>
     {/if}
   {/if}
@@ -587,10 +665,12 @@
     z-index: 100;
     display: flex;
     justify-content: center;
+    gap: 1rem; /* Add gap between buttons */
   }
   
+  .save-btn, /* Apply similar styling to save button */
   .generate-btn {
-    background-color: #4caf50;
+    /* background-color: #4caf50; */ /* Base color set individually */
     color: white;
     border: none;
     padding: 0.7rem 1.5rem;
@@ -598,10 +678,24 @@
     cursor: pointer;
     font-weight: 500;
     transition: background-color 0.2s ease;
-    width: 100%;
-    max-width: 300px;
+    width: 48%; /* Adjust width for two buttons */
+    max-width: 200px; /* Adjust max width */
   }
   
+  .save-btn {
+    background-color: #2196F3; /* Blue for save */
+  }
+  .save-btn:hover {
+    background-color: #0b7dda;
+  }
+  .save-btn:disabled {
+     background-color: #cccccc;
+     cursor: not-allowed;
+  }
+  
+  .generate-btn {
+     background-color: #4caf50; /* Green for generate */
+  }
   .generate-btn:hover {
     background-color: #45a049;
   }
@@ -645,6 +739,16 @@
     background-color: #ffebee;
     border-left: 4px solid #f44336;
     color: #d32f2f;
+    border-radius: 4px;
+  }
+
+  .save-message { /* Styling for the save success message */
+    margin-top: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 0.8rem;
+    background-color: #dff0d8; /* Light green background */
+    border-left: 4px solid #4CAF50; /* Green border */
+    color: #3c763d; /* Dark green text */
     border-radius: 4px;
   }
 </style> 

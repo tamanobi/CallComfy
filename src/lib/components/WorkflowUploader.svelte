@@ -55,7 +55,7 @@
       selectedWorkflow = workflowObj;
       
       // Dispatch event to notify parent component
-      dispatch('workflow-uploaded', { workflow: workflowObj.content });
+      dispatch('workflow-uploaded', { workflow: workflowObj });
       
       errorMessage = '';
     } catch (error) {
@@ -66,7 +66,7 @@
   
   function selectWorkflow(workflow: any) {
     selectedWorkflow = workflow;
-    dispatch('workflow-uploaded', { workflow: workflow.content });
+    dispatch('workflow-uploaded', { workflow: workflow });
   }
   
   function removeWorkflow(id: string, event: Event) {
